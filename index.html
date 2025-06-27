@@ -181,11 +181,16 @@
                         <label class="block text-sm font-medium text-gray-700 mb-2" data-i18n="settings.targetSize">目标文件大小</label>
                         <input type="number" id="targetSize" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="输入目标大小" data-i18n-placeholder="settings.placeholder" min="1">
                     </div>
-                    <div>
-                        <select id="sizeUnit" class="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    <div class="relative">
+                        <select id="sizeUnit" class="appearance-none bg-white px-4 py-3 pr-10 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent cursor-pointer min-w-[80px]">
                             <option value="KB">KB</option>
                             <option value="MB">MB</option>
                         </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -217,12 +222,18 @@
                 <div class="mb-4">
                     <i class="fas fa-check-circle text-6xl text-green-500"></i>
                 </div>
-                <h3 class="text-xl font-semibold text-gray-800 mb-2">压缩完成！</h3>
+                <h3 class="text-xl font-semibold text-gray-800 mb-2" data-i18n="compress.complete">压缩完成！</h3>
                 <p id="compressionResult" class="text-gray-600 mb-6"></p>
-                <button id="downloadBtn" class="bg-gradient-to-r from-green-500 to-blue-600 text-white px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300">
-                    <i class="fas fa-download mr-2"></i>
-                    下载压缩文件
-                </button>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button id="downloadBtn" class="bg-gradient-to-r from-green-500 to-blue-600 text-white px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300">
+                        <i class="fas fa-download mr-2"></i>
+                        <span data-i18n="compress.download">下载压缩文件</span>
+                    </button>
+                    <button id="compressNewBtn" class="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300">
+                        <i class="fas fa-plus mr-2"></i>
+                        <span data-i18n="compress.newFile">压缩其他文件</span>
+                    </button>
+                </div>
             </div>
         </div>
     </main>
@@ -230,7 +241,7 @@
     <!-- Footer -->
     <footer class="bg-gray-800 text-white py-6 mt-12">
         <div class="container mx-auto px-4 text-center">
-            <p>&copy; 2024 ZipIt. 所有文件处理均在浏览器本地完成，保护您的隐私安全。</p>
+            <p data-i18n="footer.copyright">&copy; 2025 ZipIt. 所有文件处理均在浏览器本地完成，保护您的隐私安全。</p>
         </div>
     </footer>
 
@@ -259,6 +270,7 @@
         const downloadSection = document.getElementById('downloadSection');
         const compressionResult = document.getElementById('compressionResult');
         const downloadBtn = document.getElementById('downloadBtn');
+        const compressNewBtn = document.getElementById('compressNewBtn');
 
         // Initialize
         init();
@@ -283,6 +295,7 @@
             // Compression
             compressBtn.addEventListener('click', startCompression);
             downloadBtn.addEventListener('click', downloadFile);
+            compressNewBtn.addEventListener('click', resetForNewFile);
         }
 
         function switchTab(type) {
@@ -305,12 +318,14 @@
             // Update file input accept attribute and hint text
             if (compressionType === 'image') {
                 fileInput.accept = 'image/*';
-                uploadHint.textContent = '支持 JPG, PNG, WEBP 等图片格式';
+                const hintKey = 'upload.imageSupported';
+                uploadHint.textContent = window.i18n ? window.i18n.t(hintKey) : '支持 JPG, PNG, WEBP 等图片格式';
             } else {
                 fileInput.accept = '.pdf';
-                uploadHint.textContent = '支持 PDF 文件';
+                const hintKey = 'upload.pdfSupported';
+                uploadHint.textContent = window.i18n ? window.i18n.t(hintKey) : '支持 PDF 文件';
             }
-            
+
             // Clear current file if type doesn't match
             if (currentFile && !isFileTypeValid(currentFile)) {
                 clearFile();
@@ -584,27 +599,71 @@
             const targetSizeBytes = targetSizeInput * (targetUnit === 'MB' ? 1024 * 1024 : 1024);
 
             const targetAchieved = compressedSize <= targetSizeBytes * 1.1;
-            const targetStatus = targetAchieved ? '🎉 目标达成!' : '⚠️ 未达目标';
 
-            compressionResult.textContent = `${targetStatus} 原始大小: ${formatFileSize(originalSize)} → 压缩后: ${formatFileSize(compressedSize)} (节省 ${compressionRatio}%)`;
+            // Use i18n for result text
+            const targetStatusKey = targetAchieved ? 'result.targetAchieved' : 'result.targetMissed';
+            const targetStatus = window.i18n ? window.i18n.t(targetStatusKey) : (targetAchieved ? '🎉 目标达成!' : '⚠️ 未达目标');
+
+            const originalText = window.i18n ? window.i18n.t('result.original') : '原始大小';
+            const compressedText = window.i18n ? window.i18n.t('result.compressed') : '压缩后';
+            const savingsText = window.i18n ? window.i18n.t('result.savings') : '节省';
+
+            compressionResult.innerHTML = `
+                <div class="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-4 mb-4">
+                    <div class="text-lg font-semibold text-gray-800 mb-2">${targetStatus}</div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                        <div class="text-center">
+                            <div class="text-gray-600">${originalText}</div>
+                            <div class="font-semibold text-gray-800">${formatFileSize(originalSize)}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-600">${compressedText}</div>
+                            <div class="font-semibold text-green-600">${formatFileSize(compressedSize)}</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-gray-600">${savingsText}</div>
+                            <div class="font-semibold text-blue-600">${compressionRatio}%</div>
+                        </div>
+                    </div>
+                </div>
+            `;
         }
 
         function downloadFile() {
             if (!compressedBlob) return;
-            
+
             const url = URL.createObjectURL(compressedBlob);
             const a = document.createElement('a');
             a.href = url;
-            
+
             const originalName = currentFile.name;
             const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.'));
             const ext = originalName.substring(originalName.lastIndexOf('.'));
             a.download = `${nameWithoutExt}_compressed${ext}`;
-            
+
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        }
+
+        function resetForNewFile() {
+            // Reset all states
+            currentFile = null;
+            compressedBlob = null;
+
+            // Hide sections
+            downloadSection.classList.add('hidden');
+            progressSection.classList.add('hidden');
+
+            // Reset file input
+            fileInput.value = '';
+
+            // Reset UI
+            updateUI();
+
+            // Enable compress button
+            compressBtn.disabled = false;
         }
 
         // 初始化多语言支持
