@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZipIt - 智能文件压缩工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
+    <!-- PDF-lib for PDF manipulation (fallback) -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+    <!-- Ghostscript WASM for superior PDF compression -->
+    <script type="module">
+        try {
+            const { _GSPS2PDF } = await import('./lib/worker-init.js');
+            window._GSPS2PDF = _GSPS2PDF;
+            console.log('✅ Ghostscript WASM loaded successfully');
+        } catch (error) {
+            console.error('❌ Failed to load Ghostscript WASM:', error);
+            window._GSPS2PDF = null;
+        }
+    </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-shadow {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .upload-area {
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            transform: translateY(-2px);
+        }
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse-custom {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <!-- Header -->
+    <header class="gradient-bg text-white py-6 shadow-lg">
+        <div class="container mx-auto px-4">
+            <div class="flex items-center justify-center">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center">
+                        <i class="fas fa-compress-alt text-indigo-600 text-xl"></i>
+                    </div>
+                    <h1 class="text-3xl font-bold">ZipIt</h1>
+                </div>
+            </div>
+            <p class="text-center mt-2 text-indigo-100">智能文件压缩工具 - 快速、安全、高效</p>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <!-- Compression Type Selection -->
+            <div class="bg-white rounded-2xl card-shadow p-6 mb-8">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-6 text-center">选择压缩类型</h2>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button id="imageTab" class="compression-tab active flex items-center justify-center px-6 py-4 rounded-xl font-medium transition-all duration-300 bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg">
+                        <i class="fas fa-image mr-2"></i>
+                        图片压缩
+                    </button>
+                    <button id="pdfTab" class="compression-tab flex items-center justify-center px-6 py-4 rounded-xl font-medium transition-all duration-300 bg-gray-200 text-gray-700 hover:bg-gray-300">
+                        <i class="fas fa-file-pdf mr-2"></i>
+                        PDF压缩
+                    </button>
+                </div>
+            </div>
+
+            <!-- Upload Area -->
+            <div class="bg-white rounded-2xl card-shadow p-8 mb-8">
+                <div id="uploadArea" class="upload-area border-3 border-dashed border-indigo-300 rounded-2xl p-12 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-all duration-300">
+                    <div class="mb-4">
+                        <i class="fas fa-cloud-upload-alt text-6xl text-indigo-400"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-700 mb-2">拖拽文件到这里或点击上传</h3>
+                    <p id="uploadHint" class="text-gray-500">支持 JPG, PNG, WEBP 等图片格式</p>
+                    <input type="file" id="fileInput" class="hidden" accept="image/*">
+                </div>
+                
+                <!-- File Info -->
+                <div id="fileInfo" class="hidden mt-6 p-4 bg-gray-50 rounded-xl">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <i class="fas fa-file text-indigo-500 text-xl"></i>
+                            <div>
+                                <p id="fileName" class="font-medium text-gray-800"></p>
+                                <p id="fileSize" class="text-sm text-gray-500"></p>
+                            </div>
+                        </div>
+                        <button id="removeFile" class="text-red-500 hover:text-red-700 transition-colors">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Compression Settings -->
+            <div class="bg-white rounded-2xl card-shadow p-6 mb-8">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">压缩设置</h3>
+                <div class="flex flex-col sm:flex-row gap-4 items-end">
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">目标文件大小</label>
+                        <input type="number" id="targetSize" class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="输入目标大小" min="1">
+                    </div>
+                    <div>
+                        <select id="sizeUnit" class="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="KB">KB</option>
+                            <option value="MB">MB</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Compress Button -->
+            <div class="text-center mb-8">
+                <button id="compressBtn" class="bg-gradient-to-r from-green-500 to-blue-600 text-white px-8 py-4 rounded-2xl font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
+                    <i class="fas fa-compress-alt mr-2"></i>
+                    开始压缩
+                </button>
+            </div>
+
+            <!-- Progress -->
+            <div id="progressSection" class="hidden bg-white rounded-2xl card-shadow p-6 mb-8">
+                <div class="text-center mb-4">
+                    <div class="animate-pulse-custom">
+                        <i class="fas fa-cog fa-spin text-4xl text-indigo-500 mb-2"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-800">正在压缩文件...</h3>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-3">
+                    <div id="progressBar" class="progress-bar bg-gradient-to-r from-green-400 to-blue-500 h-3 rounded-full" style="width: 0%"></div>
+                </div>
+                <p id="progressText" class="text-center text-sm text-gray-600 mt-2">0%</p>
+            </div>
+
+            <!-- Download Section -->
+            <div id="downloadSection" class="hidden bg-white rounded-2xl card-shadow p-6 text-center">
+                <div class="mb-4">
+                    <i class="fas fa-check-circle text-6xl text-green-500"></i>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-800 mb-2">压缩完成！</h3>
+                <p id="compressionResult" class="text-gray-600 mb-6"></p>
+                <button id="downloadBtn" class="bg-gradient-to-r from-green-500 to-blue-600 text-white px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300">
+                    <i class="fas fa-download mr-2"></i>
+                    下载压缩文件
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-6 mt-12">
+        <div class="container mx-auto px-4 text-center">
+            <p>&copy; 2024 ZipIt. 所有文件处理均在浏览器本地完成，保护您的隐私安全。</p>
+        </div>
+    </footer>
+
+    <script>
+        // Global variables
+        let currentFile = null;
+        let compressionType = 'image';
+        let compressedBlob = null;
+
+        // DOM elements
+        const imageTab = document.getElementById('imageTab');
+        const pdfTab = document.getElementById('pdfTab');
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const removeFile = document.getElementById('removeFile');
+        const uploadHint = document.getElementById('uploadHint');
+        const targetSize = document.getElementById('targetSize');
+        const sizeUnit = document.getElementById('sizeUnit');
+        const compressBtn = document.getElementById('compressBtn');
+        const progressSection = document.getElementById('progressSection');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const downloadSection = document.getElementById('downloadSection');
+        const compressionResult = document.getElementById('compressionResult');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        // Initialize
+        init();
+
+        function init() {
+            setupEventListeners();
+            updateUI();
+        }
+
+        function setupEventListeners() {
+            // Tab switching
+            imageTab.addEventListener('click', () => switchTab('image'));
+            pdfTab.addEventListener('click', () => switchTab('pdf'));
+
+            // File upload
+            uploadArea.addEventListener('click', () => fileInput.click());
+            uploadArea.addEventListener('dragover', handleDragOver);
+            uploadArea.addEventListener('drop', handleDrop);
+            fileInput.addEventListener('change', handleFileSelect);
+            removeFile.addEventListener('click', clearFile);
+
+            // Compression
+            compressBtn.addEventListener('click', startCompression);
+            downloadBtn.addEventListener('click', downloadFile);
+        }
+
+        function switchTab(type) {
+            compressionType = type;
+            
+            // Update tab appearance
+            document.querySelectorAll('.compression-tab').forEach(tab => {
+                tab.classList.remove('active', 'bg-gradient-to-r', 'from-blue-500', 'to-purple-600', 'text-white', 'shadow-lg');
+                tab.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+            });
+            
+            const activeTab = type === 'image' ? imageTab : pdfTab;
+            activeTab.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+            activeTab.classList.add('active', 'bg-gradient-to-r', 'from-blue-500', 'to-purple-600', 'text-white', 'shadow-lg');
+            
+            updateUI();
+        }
+
+        function updateUI() {
+            // Update file input accept attribute and hint text
+            if (compressionType === 'image') {
+                fileInput.accept = 'image/*';
+                uploadHint.textContent = '支持 JPG, PNG, WEBP 等图片格式';
+            } else {
+                fileInput.accept = '.pdf';
+                uploadHint.textContent = '支持 PDF 文件';
+            }
+            
+            // Clear current file if type doesn't match
+            if (currentFile && !isFileTypeValid(currentFile)) {
+                clearFile();
+            }
+        }
+
+        function isFileTypeValid(file) {
+            if (compressionType === 'image') {
+                return file.type.startsWith('image/');
+            } else {
+                return file.type === 'application/pdf';
+            }
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadArea.classList.add('border-indigo-500', 'bg-indigo-50');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('border-indigo-500', 'bg-indigo-50');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+
+        function handleFile(file) {
+            if (!isFileTypeValid(file)) {
+                alert(`请选择正确的${compressionType === 'image' ? '图片' : 'PDF'}文件`);
+                return;
+            }
+            
+            currentFile = file;
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            fileInfo.classList.remove('hidden');
+            
+            // Reset other sections
+            progressSection.classList.add('hidden');
+            downloadSection.classList.add('hidden');
+        }
+
+        function clearFile() {
+            currentFile = null;
+            fileInput.value = '';
+            fileInfo.classList.add('hidden');
+            progressSection.classList.add('hidden');
+            downloadSection.classList.add('hidden');
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        async function startCompression() {
+            if (!currentFile) {
+                alert('请先选择文件');
+                return;
+            }
+            
+            const targetSizeValue = parseFloat(targetSize.value);
+            if (!targetSizeValue || targetSizeValue <= 0) {
+                alert('请输入有效的目标文件大小');
+                return;
+            }
+            
+            // Convert target size to bytes
+            const targetSizeBytes = sizeUnit.value === 'MB' ? targetSizeValue * 1024 * 1024 : targetSizeValue * 1024;
+            
+            // Show progress
+            progressSection.classList.remove('hidden');
+            downloadSection.classList.add('hidden');
+            compressBtn.disabled = true;
+            
+            try {
+                if (compressionType === 'image') {
+                    await compressImage(currentFile, targetSizeBytes);
+                } else {
+                    await compressPDF(currentFile, targetSizeBytes);
+                }
+            } catch (error) {
+                console.error('Compression error:', error);
+                alert('压缩过程中出现错误，请重试');
+            } finally {
+                compressBtn.disabled = false;
+            }
+        }
+
+        async function compressImage(file, targetSizeBytes) {
+            updateProgress(10, '正在分析图片...');
+            
+            // Calculate compression quality based on target size
+            let quality = Math.min(0.9, targetSizeBytes / file.size);
+            quality = Math.max(0.1, quality); // Minimum quality
+            
+            updateProgress(30, '正在压缩图片...');
+            
+            const options = {
+                maxSizeMB: targetSizeBytes / (1024 * 1024),
+                maxWidthOrHeight: 1920,
+                useWebWorker: true,
+                initialQuality: quality
+            };
+            
+            try {
+                compressedBlob = await imageCompression(file, options);
+                updateProgress(90, '压缩完成...');
+                
+                setTimeout(() => {
+                    showCompressionResult(file.size, compressedBlob.size);
+                }, 500);
+                
+            } catch (error) {
+                throw new Error('图片压缩失败: ' + error.message);
+            }
+        }
+
+        async function compressPDFWithGhostscript(file, targetSizeBytes) {
+            updateProgress(10, '正在读取PDF...');
+
+            const originalSize = file.size;
+            const compressionNeeded = ((originalSize - targetSizeBytes) / originalSize * 100).toFixed(1);
+
+            updateProgress(20, `使用Ghostscript引擎压缩 ${compressionNeeded}% (${formatFileSize(originalSize)} → ${formatFileSize(targetSizeBytes)})`);
+
+            // Check if Ghostscript WASM is available
+            if (!window._GSPS2PDF) {
+                throw new Error('Ghostscript WASM not available');
+            }
+
+            try {
+                // Create blob URL for the file
+                const fileURL = URL.createObjectURL(file);
+
+                updateProgress(40, '正在启动Ghostscript压缩引擎...');
+                console.log('📄 Starting Ghostscript compression for file:', file.name, 'Size:', formatFileSize(originalSize));
+
+                // Use Ghostscript WASM for compression with target size
+                const dataStruct = {
+                    psDataURL: fileURL,
+                    targetSize: targetSizeBytes  // Pass target size for dynamic compression
+                };
+
+                updateProgress(60, '正在进行专业级PDF压缩...');
+
+                const result = await window._GSPS2PDF(dataStruct);
+
+                // 检查是否有错误
+                if (result && result.error) {
+                    throw new Error(`Ghostscript processing failed: ${result.error}`);
+                }
+
+                const compressedURL = result;
+                console.log('🔧 Ghostscript compression completed, result URL:', compressedURL);
+
+                updateProgress(80, '正在处理压缩结果...');
+
+                // Fetch the compressed PDF
+                const response = await fetch(compressedURL);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch compressed PDF: ${response.status}`);
+                }
+
+                const compressedArrayBuffer = await response.arrayBuffer();
+                compressedBlob = new Blob([compressedArrayBuffer], { type: 'application/pdf' });
+
+                // Clean up URLs
+                URL.revokeObjectURL(fileURL);
+                URL.revokeObjectURL(compressedURL);
+
+                const finalSize = compressedBlob.size;
+                const actualSavings = ((originalSize - finalSize) / originalSize * 100).toFixed(1);
+                const targetAchieved = finalSize <= targetSizeBytes * 1.1; // 10% tolerance
+
+                console.log(`📊 Compression results: ${formatFileSize(originalSize)} → ${formatFileSize(finalSize)} (${actualSavings}% saved)`);
+                console.log(`🎯 Target: ${formatFileSize(targetSizeBytes)}, Actual: ${formatFileSize(finalSize)}, Target achieved: ${targetAchieved}`);
+
+                updateProgress(95, targetAchieved ?
+                    `🎉 目标达成! ${formatFileSize(finalSize)} (节省${actualSavings}%)` :
+                    `压缩完成，节省${actualSavings}% (目标${formatFileSize(targetSizeBytes)}，实际${formatFileSize(finalSize)})`
+                );
+
+                setTimeout(() => {
+                    showCompressionResult(originalSize, finalSize);
+                }, 500);
+
+            } catch (error) {
+                console.error('❌ Ghostscript compression error:', error);
+                updateProgress(50, '⚠️ Ghostscript压缩失败，尝试备用方案...');
+
+                // Fallback to pdf-lib compression
+                await compressPDFWithPdfLib(file, targetSizeBytes);
+            }
+        }
+
+        async function compressPDFWithPdfLib(file, targetSizeBytes) {
+            updateProgress(60, '正在使用备用压缩方案...');
+
+            const arrayBuffer = await file.arrayBuffer();
+            const originalSize = file.size;
+
+            try {
+                const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+
+                // Basic optimization
+                pdfDoc.setTitle('');
+                pdfDoc.setAuthor('');
+                pdfDoc.setSubject('');
+                pdfDoc.setKeywords([]);
+                pdfDoc.setProducer('');
+                pdfDoc.setCreator('');
+
+                const optimizedBytes = await pdfDoc.save({
+                    useObjectStreams: true,
+                    addDefaultPage: false,
+                    objectStreamsThreshold: 1,
+                    updateFieldAppearances: false
+                });
+
+                compressedBlob = new Blob([optimizedBytes], { type: 'application/pdf' });
+
+                const finalSavings = ((originalSize - compressedBlob.size) / originalSize * 100).toFixed(1);
+                updateProgress(95, `备用方案完成，节省${finalSavings}%`);
+
+                setTimeout(() => {
+                    showCompressionResult(originalSize, compressedBlob.size);
+                }, 500);
+
+            } catch (error) {
+                console.error('PDF-lib compression error:', error);
+                compressedBlob = new Blob([arrayBuffer], { type: 'application/pdf' });
+                setTimeout(() => {
+                    showCompressionResult(originalSize, compressedBlob.size);
+                }, 500);
+            }
+        }
+
+        // Main compression function that tries Ghostscript first
+        async function compressPDF(file, targetSizeBytes) {
+            await compressPDFWithGhostscript(file, targetSizeBytes);
+        }
+
+        function updateProgress(percent, text) {
+            progressBar.style.width = percent + '%';
+            progressText.textContent = text + ' (' + percent + '%)';
+        }
+
+        function showCompressionResult(originalSize, compressedSize) {
+            progressSection.classList.add('hidden');
+            downloadSection.classList.remove('hidden');
+
+            const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
+
+            // Get target size from input
+            const targetSizeInput = parseFloat(document.getElementById('targetSize').value);
+            const targetUnit = document.getElementById('sizeUnit').value;
+            const targetSizeBytes = targetSizeInput * (targetUnit === 'MB' ? 1024 * 1024 : 1024);
+
+            const targetAchieved = compressedSize <= targetSizeBytes * 1.1;
+            const targetStatus = targetAchieved ? '🎉 目标达成!' : '⚠️ 未达目标';
+
+            compressionResult.textContent = `${targetStatus} 原始大小: ${formatFileSize(originalSize)} → 压缩后: ${formatFileSize(compressedSize)} (节省 ${compressionRatio}%)`;
+        }
+
+        function downloadFile() {
+            if (!compressedBlob) return;
+            
+            const url = URL.createObjectURL(compressedBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            const originalName = currentFile.name;
+            const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.'));
+            const ext = originalName.substring(originalName.lastIndexOf('.'));
+            a.download = `${nameWithoutExt}_compressed${ext}`;
+            
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
