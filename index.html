@@ -101,24 +101,25 @@
 </head>
 <body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
     <!-- Header -->
-    <header class="gradient-bg text-white py-6 shadow-lg">
+    <header class="gradient-bg text-white py-4 shadow-lg">
         <div class="container mx-auto px-4">
             <div class="flex items-center justify-between">
                 <!-- Logo and Title -->
                 <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center">
-                        <i class="fas fa-compress-alt text-indigo-600 text-xl"></i>
+                    <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/30">
+                        <i class="fas fa-compress-alt text-white text-xl"></i>
                     </div>
-                    <h1 class="text-3xl font-bold" data-i18n="nav.title">ZipIt</h1>
+                    <div>
+                        <h1 class="text-2xl font-bold" data-i18n="nav.title">ZipIt</h1>
+                        <p class="text-xs text-indigo-100 opacity-90" data-i18n="nav.subtitle">智能文件压缩工具</p>
+                    </div>
                 </div>
 
                 <!-- Language Switcher -->
-                <div class="flex items-center space-x-4">
-                    <span class="text-sm text-indigo-100" data-i18n="nav.language">语言</span>
-                    <div id="language-switcher"></div>
+                <div class="flex items-center space-x-3">
+                    <div id="language-switcher" class="relative"></div>
                 </div>
             </div>
-            <p class="text-center mt-2 text-indigo-100" data-i18n="nav.subtitle">智能文件压缩工具 - 快速、安全、高效</p>
         </div>
     </header>
 
