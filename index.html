@@ -429,13 +429,15 @@
         }
 
         async function compressImage(file, targetSizeBytes) {
-            updateProgress(10, '正在分析图片...');
-            
+            const analyzingText = window.i18n ? window.i18n.t('progress.analyzing') : '正在分析图片...';
+            updateProgress(10, analyzingText);
+
             // Calculate compression quality based on target size
             let quality = Math.min(0.9, targetSizeBytes / file.size);
             quality = Math.max(0.1, quality); // Minimum quality
-            
-            updateProgress(30, '正在压缩图片...');
+
+            const compressingText = window.i18n ? window.i18n.t('progress.compressing') : '正在压缩图片...';
+            updateProgress(30, compressingText);
             
             const options = {
                 maxSizeMB: targetSizeBytes / (1024 * 1024),
@@ -458,12 +460,20 @@
         }
 
         async function compressPDFWithGhostscript(file, targetSizeBytes) {
-            updateProgress(10, '正在读取PDF...');
+            const readingText = window.i18n ? window.i18n.t('progress.reading') : '正在读取PDF...';
+            updateProgress(10, readingText);
 
             const originalSize = file.size;
             const compressionNeeded = ((originalSize - targetSizeBytes) / originalSize * 100).toFixed(1);
 
-            updateProgress(20, `使用Ghostscript引擎压缩 ${compressionNeeded}% (${formatFileSize(originalSize)} → ${formatFileSize(targetSizeBytes)})`);
+            const engineText = window.i18n ?
+                window.i18n.t('progress.engineCompression', {
+                    percentage: compressionNeeded,
+                    original: formatFileSize(originalSize),
+                    target: formatFileSize(targetSizeBytes)
+                }) :
+                `使用Ghostscript引擎压缩 ${compressionNeeded}% (${formatFileSize(originalSize)} → ${formatFileSize(targetSizeBytes)})`;
+            updateProgress(20, engineText);
 
             // Check if Ghostscript WASM is available
             if (!window._GSPS2PDF) {
@@ -474,7 +484,8 @@
                 // Create blob URL for the file
                 const fileURL = URL.createObjectURL(file);
 
-                updateProgress(40, '正在启动Ghostscript压缩引擎...');
+                const ghostscriptText = window.i18n ? window.i18n.t('progress.ghostscript') : '正在启动Ghostscript压缩引擎...';
+                updateProgress(40, ghostscriptText);
                 console.log('📄 Starting Ghostscript compression for file:', file.name, 'Size:', formatFileSize(originalSize));
 
                 // Use Ghostscript WASM for compression with target size
@@ -483,7 +494,8 @@
                     targetSize: targetSizeBytes  // Pass target size for dynamic compression
                 };
 
-                updateProgress(60, '正在进行专业级PDF压缩...');
+                const professionalText = window.i18n ? window.i18n.t('progress.professional') : '正在进行专业级PDF压缩...';
+                updateProgress(60, professionalText);
 
                 const result = await window._GSPS2PDF(dataStruct);
 
@@ -495,7 +507,8 @@
                 const compressedURL = result;
                 console.log('🔧 Ghostscript compression completed, result URL:', compressedURL);
 
-                updateProgress(80, '正在处理压缩结果...');
+                const processingText = window.i18n ? window.i18n.t('progress.processing') : '正在处理压缩结果...';
+                updateProgress(80, processingText);
 
                 // Fetch the compressed PDF
                 const response = await fetch(compressedURL);
@@ -517,10 +530,22 @@
                 console.log(`📊 Compression results: ${formatFileSize(originalSize)} → ${formatFileSize(finalSize)} (${actualSavings}% saved)`);
                 console.log(`🎯 Target: ${formatFileSize(targetSizeBytes)}, Actual: ${formatFileSize(finalSize)}, Target achieved: ${targetAchieved}`);
 
-                updateProgress(95, targetAchieved ?
-                    `🎉 目标达成! ${formatFileSize(finalSize)} (节省${actualSavings}%)` :
-                    `压缩完成，节省${actualSavings}% (目标${formatFileSize(targetSizeBytes)}，实际${formatFileSize(finalSize)})`
-                );
+                const finalProgressText = targetAchieved ?
+                    (window.i18n ?
+                        window.i18n.t('progress.targetAchieved', {
+                            size: formatFileSize(finalSize),
+                            savings: actualSavings
+                        }) :
+                        `🎉 目标达成! ${formatFileSize(finalSize)} (节省${actualSavings}%)`) :
+                    (window.i18n ?
+                        window.i18n.t('progress.completed', {
+                            savings: actualSavings,
+                            target: formatFileSize(targetSizeBytes),
+                            actual: formatFileSize(finalSize)
+                        }) :
+                        `压缩完成，节省${actualSavings}% (目标${formatFileSize(targetSizeBytes)}，实际${formatFileSize(finalSize)})`);
+
+                updateProgress(95, finalProgressText);
 
                 setTimeout(() => {
                     showCompressionResult(originalSize, finalSize);
@@ -536,7 +561,8 @@
         }
 
         async function compressPDFWithPdfLib(file, targetSizeBytes) {
-            updateProgress(60, '正在使用备用压缩方案...');
+            const backupText = window.i18n ? window.i18n.t('progress.backup') : '正在使用备用压缩方案...';
+            updateProgress(60, backupText);
 
             const arrayBuffer = await file.arrayBuffer();
             const originalSize = file.size;
