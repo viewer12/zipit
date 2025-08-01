@@ -33,6 +33,10 @@
    npx serve .
    ```
 
+## 调试
+
+项目提供 `create-test-pdf.html` 页面用于生成示例 PDF，便于测试压缩效果。打开该页面即可下载一份约 10 页的测试文档。
+
 ## 部署到 Cloudflare Pages
 
 1. 将代码推送到 GitHub 仓库

@@ -243,6 +243,9 @@
     <footer class="bg-gray-800 text-white py-6 mt-12">
         <div class="container mx-auto px-4 text-center">
             <p data-i18n="footer.copyright">&copy; 2025 ZipIt. 所有文件处理均在浏览器本地完成，保护您的隐私安全。</p>
+            <p class="mt-2 text-sm">
+                <a href="create-test-pdf.html" class="underline text-blue-300 hover:text-blue-400">生成测试PDF</a>
+            </p>
         </div>
     </footer>
 
@@ -460,6 +463,21 @@
             }
         }
 
+        async function runGhostscriptCompression(fileURL, targetSize) {
+            const dataStruct = { psDataURL: fileURL, targetSize };
+            const result = await window._GSPS2PDF(dataStruct);
+            if (result && result.error) {
+                throw new Error(`Ghostscript processing failed: ${result.error}`);
+            }
+            const response = await fetch(result);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch compressed PDF: ${response.status}`);
+            }
+            const buf = await response.arrayBuffer();
+            URL.revokeObjectURL(result);
+            return new Blob([buf], { type: 'application/pdf' });
+        }
+
         async function compressPDFWithGhostscript(file, targetSizeBytes) {
             const readingText = window.i18n ? window.i18n.t('progress.reading') : '正在读取PDF...';
             updateProgress(10, readingText);
@@ -476,57 +494,37 @@
                 `使用Ghostscript引擎压缩 ${compressionNeeded}% (${formatFileSize(originalSize)} → ${formatFileSize(targetSizeBytes)})`;
             updateProgress(20, engineText);
 
-            // Check if Ghostscript WASM is available
             if (!window._GSPS2PDF) {
                 throw new Error('Ghostscript WASM not available');
             }
 
             try {
-                // Create blob URL for the file
                 const fileURL = URL.createObjectURL(file);
-
+                const attempts = [targetSizeBytes, targetSizeBytes * 0.8, targetSizeBytes * 0.6];
                 const ghostscriptText = window.i18n ? window.i18n.t('progress.ghostscript') : '正在启动Ghostscript压缩引擎...';
                 updateProgress(40, ghostscriptText);
                 console.log('📄 Starting Ghostscript compression for file:', file.name, 'Size:', formatFileSize(originalSize));
 
-                // Use Ghostscript WASM for compression with target size
-                const dataStruct = {
-                    psDataURL: fileURL,
-                    targetSize: targetSizeBytes  // Pass target size for dynamic compression
-                };
-
-                const professionalText = window.i18n ? window.i18n.t('progress.professional') : '正在进行专业级PDF压缩...';
-                updateProgress(60, professionalText);
-
-                const result = await window._GSPS2PDF(dataStruct);
-
-                // 检查是否有错误
-                if (result && result.error) {
-                    throw new Error(`Ghostscript processing failed: ${result.error}`);
+                let bestBlob = null;
+                for (let i = 0; i < attempts.length; i++) {
+                    const professionalText = (window.i18n ? window.i18n.t('progress.professional') : '正在进行专业级PDF压缩...') + ` (${i + 1}/${attempts.length})`;
+                    updateProgress(60 + i * 5, professionalText);
+                    const blob = await runGhostscriptCompression(fileURL, attempts[i]);
+                    if (!bestBlob || blob.size < bestBlob.size) {
+                        bestBlob = blob;
+                    }
+                    if (blob.size <= targetSizeBytes * 1.05) {
+                        bestBlob = blob;
+                        break;
+                    }
                 }
 
-                const compressedURL = result;
-                console.log('🔧 Ghostscript compression completed, result URL:', compressedURL);
-
-                const processingText = window.i18n ? window.i18n.t('progress.processing') : '正在处理压缩结果...';
-                updateProgress(80, processingText);
-
-                // Fetch the compressed PDF
-                const response = await fetch(compressedURL);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch compressed PDF: ${response.status}`);
-                }
-
-                const compressedArrayBuffer = await response.arrayBuffer();
-                compressedBlob = new Blob([compressedArrayBuffer], { type: 'application/pdf' });
-
-                // Clean up URLs
+                compressedBlob = bestBlob;
                 URL.revokeObjectURL(fileURL);
-                URL.revokeObjectURL(compressedURL);
 
                 const finalSize = compressedBlob.size;
                 const actualSavings = ((originalSize - finalSize) / originalSize * 100).toFixed(1);
-                const targetAchieved = finalSize <= targetSizeBytes * 1.1; // 10% tolerance
+                const targetAchieved = finalSize <= targetSizeBytes * 1.1;
 
                 console.log(`📊 Compression results: ${formatFileSize(originalSize)} → ${formatFileSize(finalSize)} (${actualSavings}% saved)`);
                 console.log(`🎯 Target: ${formatFileSize(targetSizeBytes)}, Actual: ${formatFileSize(finalSize)}, Target achieved: ${targetAchieved}`);
@@ -555,8 +553,6 @@
             } catch (error) {
                 console.error('❌ Ghostscript compression error:', error);
                 updateProgress(50, '⚠️ Ghostscript压缩失败，尝试备用方案...');
-
-                // Fallback to pdf-lib compression
                 await compressPDFWithPdfLib(file, targetSizeBytes);
             }
         }
